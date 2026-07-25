@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Administrator\\Downloads\\VoiceRecord\\VoiceRecorder\\VoiceRecorder.vbproj": {}
+    "D:\\Source Code\\Tool-Video\\VoiceRecorder\\VoiceRecorder\\VoiceRecorder.vbproj": {}
   },
   "projects": {
-    "C:\\Users\\Administrator\\Downloads\\VoiceRecord\\VoiceRecorder\\VoiceRecorder.vbproj": {
+    "D:\\Source Code\\Tool-Video\\VoiceRecorder\\VoiceRecorder\\VoiceRecorder.vbproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Administrator\\Downloads\\VoiceRecord\\VoiceRecorder\\VoiceRecorder.vbproj",
+        "projectUniqueName": "D:\\Source Code\\Tool-Video\\VoiceRecorder\\VoiceRecorder\\VoiceRecorder.vbproj",
         "projectName": "VoiceRecorder",
-        "projectPath": "C:\\Users\\Administrator\\Downloads\\VoiceRecord\\VoiceRecorder\\VoiceRecorder.vbproj",
+        "projectPath": "D:\\Source Code\\Tool-Video\\VoiceRecorder\\VoiceRecorder\\VoiceRecorder.vbproj",
         "packagesPath": "C:\\Users\\Administrator\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Administrator\\Downloads\\VoiceRecord\\VoiceRecorder\\obj\\",
+        "outputPath": "D:\\Source Code\\Tool-Video\\VoiceRecorder\\VoiceRecorder\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Administrator\\AppData\\Roaming\\NuGet\\NuGet.Config"

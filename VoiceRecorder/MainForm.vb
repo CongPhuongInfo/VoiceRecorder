@@ -15,10 +15,17 @@ Public Class MainForm
     Private ReadOnly outputRoot As String = Path.Combine(Application.StartupPath, "dataset")
     Private ReadOnly wavsFolder As String
     Private ReadOnly metadataPath As String
+    Private ReadOnly lastPositionPath As String
 
     Private sentences As New List(Of String)
     Private recordedIndices As New HashSet(Of Integer)
     Private currentIndex As Integer = 0
+
+    ' ===== Nguong kiem tra chat luong ghi am =====
+    Private Const MIN_DURATION_SECONDS As Double = 0.4
+    Private Const MIN_PEAK_LEVEL As Single = 0.03
+    Private Const MAX_CLIP_RATIO As Double = 0.02   ' 2% so mau bi vo tieng
+    Private Const CLIP_SAMPLE_THRESHOLD As Integer = 32000 ' gan max cua Int16 (32767)
 
     ' ===== NAudio =====
     Private waveIn As WaveInEvent
@@ -26,6 +33,12 @@ Public Class MainForm
     Private tempFilePath As String
     Private isRecording As Boolean = False
     Private currentVolume As Single = 0
+
+    ' thong ke chat luong cho lan ghi hien tai
+    Private recSampleCount As Long = 0
+    Private recClippedCount As Long = 0
+    Private recPeakLevel As Single = 0
+    Private recSampleRate As Integer = 44100
 
     ' ===== UI controls =====
     Private lblProgress As Label
@@ -43,11 +56,13 @@ Public Class MainForm
     Public Sub New()
         wavsFolder = Path.Combine(outputRoot, "wavs")
         metadataPath = Path.Combine(outputRoot, "metadata.csv")
+        lastPositionPath = Path.Combine(outputRoot, "last_position.txt")
         Directory.CreateDirectory(wavsFolder)
 
         InitUI()
         LoadScript()
         LoadExistingProgress()
+        LoadLastPosition()
         PopulateDevices()
         ShowSentence()
     End Sub
@@ -166,6 +181,33 @@ Public Class MainForm
         Next
     End Sub
 
+    ' Nap lai chinh xac cau dang lam do tu lan truoc (neu co), de tiep tuc dung cho
+    ' du ban da luot qua vai cau chua thu roi moi tat app, khong chi nhay ve cau
+    ' dau tien chua thu nhu LoadExistingProgress.
+    Private Sub LoadLastPosition()
+        If Not File.Exists(lastPositionPath) Then Return
+
+        Try
+            Dim content = File.ReadAllText(lastPositionPath).Trim()
+            Dim savedIndex As Integer
+            If Integer.TryParse(content, savedIndex) Then
+                If savedIndex >= 0 AndAlso savedIndex < sentences.Count Then
+                    currentIndex = savedIndex
+                End If
+            End If
+        Catch
+            ' file loi/hong thi bo qua, giu nguyen vi tri tinh boi LoadExistingProgress
+        End Try
+    End Sub
+
+    Private Sub SaveLastPosition()
+        Try
+            File.WriteAllText(lastPositionPath, currentIndex.ToString())
+        Catch
+            ' khong the luu thi thoi, khong lam gian doan viec ghi am
+        End Try
+    End Sub
+
     Private Sub PopulateDevices()
         cmbDevice.Items.Clear()
         For i = 0 To WaveInEvent.DeviceCount - 1
@@ -185,6 +227,8 @@ Public Class MainForm
         Dim hasRecording = recordedIndices.Contains(currentIndex)
         btnPlay.Enabled = hasRecording
         lblSentence.BackColor = If(hasRecording, Color.FromArgb(220, 255, 220), Color.White)
+
+        SaveLastPosition()
     End Sub
 
     Private Function GetFileId(index As Integer) As String
@@ -223,6 +267,12 @@ Public Class MainForm
 
         tempWriter = New WaveFileWriter(tempFilePath, waveIn.WaveFormat)
 
+        ' reset thong ke chat luong cho lan ghi nay
+        recSampleCount = 0
+        recClippedCount = 0
+        recPeakLevel = 0
+        recSampleRate = waveIn.WaveFormat.SampleRate
+
         waveIn.StartRecording()
         isRecording = True
         btnRecord.Text = "Dung ghi am (Space)"
@@ -239,12 +289,16 @@ Public Class MainForm
     Private Sub WaveIn_DataAvailable(sender As Object, e As WaveInEventArgs)
         tempWriter?.Write(e.Buffer, 0, e.BytesRecorded)
 
-        ' tinh bien do de hien thi thanh volume meter
+        ' tinh bien do de hien thi thanh volume meter, dong thoi gom thong ke chat luong
         Dim maxSample As Single = 0
         For i = 0 To e.BytesRecorded - 2 Step 2
             Dim sampleVal = BitConverter.ToInt16(e.Buffer, i)
-            Dim abs = Math.Abs(sampleVal) / 32768.0F
+            Dim absRaw = Math.Abs(CInt(sampleVal))
+            Dim abs = absRaw / 32768.0F
             If abs > maxSample Then maxSample = abs
+            If abs > recPeakLevel Then recPeakLevel = abs
+            If absRaw >= CLIP_SAMPLE_THRESHOLD Then recClippedCount += 1
+            recSampleCount += 1
         Next
         currentVolume = maxSample
     End Sub
@@ -256,7 +310,49 @@ Public Class MainForm
         waveIn = Nothing
         currentVolume = 0
 
-        SaveFinalWav()
+        Dim errorMsg = CheckRecordingQuality()
+        If errorMsg IsNot Nothing Then
+            RejectRecording(errorMsg)
+        Else
+            SaveFinalWav()
+        End If
+    End Sub
+
+    ' Kiem tra chat luong ban ghi vua thu. Tra ve Nothing neu OK, hoac chuoi mo ta loi neu khong dat.
+    Private Function CheckRecordingQuality() As String
+        If recSampleCount = 0 Then
+            Return "Khong ghi duoc am thanh nao. Vui long kiem tra microphone va ghi lai."
+        End If
+
+        Dim durationSeconds = recSampleCount / CDbl(recSampleRate)
+        If durationSeconds < MIN_DURATION_SECONDS Then
+            Return $"Ghi am qua ngan ({durationSeconds:0.00}s). Vui long doc du cau va ghi lai."
+        End If
+
+        If recPeakLevel < MIN_PEAK_LEVEL Then
+            Return "Khong phat hien am thanh ro rang (qua nho hoac im lang). Kiem tra lai microphone va ghi lai."
+        End If
+
+        Dim clipRatio = recClippedCount / CDbl(recSampleCount)
+        If clipRatio > MAX_CLIP_RATIO Then
+            Return $"Am thanh bi vo tieng / clipping ({clipRatio:P1} so mau). Noi nho hon hoac lui mic ra xa roi ghi lai."
+        End If
+
+        Return Nothing
+    End Function
+
+    ' Huy ban ghi loi: xoa file tam, KHONG dong vao file/metadata da luu truoc do (neu co)
+    Private Sub RejectRecording(reason As String)
+        Try
+            If File.Exists(tempFilePath) Then File.Delete(tempFilePath)
+        Catch
+            ' bo qua loi xoa file tam
+        End Try
+
+        lblStatus.Text = "Loi: " & reason
+        lblStatus.ForeColor = Color.Red
+        MessageBox.Show(reason, "Ban ghi khong dat yeu cau", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+        ShowSentence()
     End Sub
 
     Private Sub SaveFinalWav()
@@ -381,6 +477,7 @@ Public Class MainForm
 
     Protected Overrides Sub OnFormClosing(e As FormClosingEventArgs)
         If isRecording Then StopRecording()
+        SaveLastPosition()
         meterTimer?.Stop()
         MyBase.OnFormClosing(e)
     End Sub
