@@ -1,0 +1,5 @@
+C:\Users\Administrator\Downloads\VoiceRecord\VoiceRecorder\obj\Release\net9.0-windows\VoiceRecorder.vbproj.AssemblyReference.cache
+C:\Users\Administrator\Downloads\VoiceRecord\VoiceRecorder\obj\Release\net9.0-windows\VoiceRecorder.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Administrator\Downloads\VoiceRecord\VoiceRecorder\obj\Release\net9.0-windows\VoiceRecorder.AssemblyInfoInputs.cache
+C:\Users\Administrator\Downloads\VoiceRecord\VoiceRecorder\obj\Release\net9.0-windows\VoiceRecorder.AssemblyInfo.vb
+C:\Users\Administrator\Downloads\VoiceRecord\VoiceRecorder\obj\Release\net9.0-windows\VoiceRecorder.vbproj.CoreCompileInputs.cache
