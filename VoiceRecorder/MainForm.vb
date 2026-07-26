@@ -247,15 +247,15 @@ Public Class MainForm
         Me.Text = $"Voice Recorder - Thu am dataset TTS  [{currentScriptName}]"
     End Sub
 
-    Private Sub LoadScriptFile(path As String)
-        If Not File.Exists(path) Then
-            MessageBox.Show($"Khong tim thay file: {Path.GetFileName(path)}",
+    Private Sub LoadScriptFile(scriptFilePath As String)
+        If Not File.Exists(scriptFilePath) Then
+            MessageBox.Show($"Khong tim thay file: {Path.GetFileName(scriptFilePath)}",
                              "Loi", MessageBoxButtons.OK, MessageBoxIcon.Error)
             sentences.Add("Khong co cau mau nao duoc tai.")
             Return
         End If
 
-        For Each line In File.ReadAllLines(path)
+        For Each line In File.ReadAllLines(scriptFilePath)
             Dim trimmed = line.Trim()
             If trimmed.Length > 0 Then
                 sentences.Add(trimmed)
