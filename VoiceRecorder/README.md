@@ -60,13 +60,16 @@ Sau khi thu xong (hoặc thu thử một phần để test), làm theo thứ t�
 2. **Upload lên Google Drive:** đưa `dataset.zip` lên Drive, tốt nhất để ngay trong `MyDrive` gốc
    (nếu để trong thư mục con thì nhớ sửa đường dẫn `DATASET_ZIP` ở bước 3 trong notebook).
 3. **Mở Google Colab:** truy cập [colab.research.google.com](https://colab.research.google.com/).
-4. **Tải notebook lên:** bấm **"Tải sổ tay lên"**, chọn file `Train_Piper_FineTune.ipynb` (đi kèm trong project này).
+4. **Tải notebook lên:** bấm **"Tải sổ tay lên"** → chọn tab **"Tải lên"** (Upload) trong hộp thoại hiện ra → chọn trực tiếp file
+   `Train_Piper_FineTune.ipynb` từ bộ nhớ máy/điện thoại (không cần đưa file này lên Drive trước, chỉ `dataset.zip` mới cần).
 5. **Bật GPU:** vào **Runtime → Change runtime type → GPU (T4)** trước khi chạy.
-6. **Chạy từng ô theo thứ tự** (bấm nút ▶ ở từng ô, từ trên xuống dưới). Notebook sẽ tự:
+6. **Chạy từng ô theo thứ tự** (bấm nút ▶ ở từng ô, từ trên xuống dưới). Notebook dùng repo **piper1-gpl**
+   (bản Piper mới, tương thích Python 3.12 trên Colab hiện tại — bản cũ dễ lỗi cài đặt do ghim phiên bản `torch` quá cũ). Notebook sẽ tự:
    - Kết nối Google Drive và giải nén dataset.
-   - Cài Piper + tải sẵn checkpoint tiếng Việt **vais1000-medium** để fine-tune (không train từ đầu).
-   - Preprocess dataset, fine-tune, rồi export ra `.onnx` + `.onnx.json`.
-   - Cho nghe thử kết quả ngay trong Colab, và lưu file cuối cùng vào Google Drive.
+   - Cài piper1-gpl + tải sẵn checkpoint tiếng Việt **vais1000-medium** để fine-tune (không train từ đầu).
+   - Convert `metadata.csv` sang đúng format piper1-gpl cần.
+   - Fine-tune không giới hạn epoch — bạn tự dừng (**Runtime → Interrupt execution**) khi thấy ổn, rồi export thử nghe.
+   - Export ra `.onnx` + `.onnx.json`, cho nghe thử ngay trong Colab, và lưu file cuối cùng vào Google Drive.
 
 **Lưu ý:** Colab bản miễn phí giới hạn thời gian chạy mỗi phiên và có thể ngắt bất chợt. Nếu bị ngắt giữa chừng lúc train,
 mở lại notebook, chạy lại từ đầu tới bước cài đặt, rồi ở bước training thay `--resume_from_checkpoint` bằng checkpoint

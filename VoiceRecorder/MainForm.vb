@@ -11,11 +11,12 @@ Public Class MainForm
     Private Const TARGET_BITS As Integer = 16
     Private Const TARGET_CHANNELS As Integer = 1
 
-    Private ReadOnly scriptPath As String = Path.Combine(Application.StartupPath, "script.txt")
+    Private ReadOnly scriptsFolder As String = Path.Combine(Application.StartupPath, "scripts")
     Private ReadOnly outputRoot As String = Path.Combine(Application.StartupPath, "dataset")
-    Private ReadOnly wavsFolder As String
-    Private ReadOnly metadataPath As String
-    Private ReadOnly lastPositionPath As String
+    Private wavsFolder As String
+    Private metadataPath As String
+    Private lastPositionPath As String
+    Private currentScriptName As String = ""
 
     Private sentences As New List(Of String)
     Private recordedIndices As New HashSet(Of Integer)
@@ -45,6 +46,8 @@ Public Class MainForm
     Private lblSentence As Label
     Private lblStatus As Label
     Private cmbDevice As ComboBox
+    Private lblScript As Label
+    Private cmbScript As ComboBox
     Private progressOverall As ProgressBar
     Private meterVolume As ProgressBar
     Private btnRecord As Button
@@ -52,17 +55,22 @@ Public Class MainForm
     Private btnPrev As Button
     Private btnNext As Button
     Private meterTimer As Timer
+    Private isLoadingScript As Boolean = False
 
     Public Sub New()
-        wavsFolder = Path.Combine(outputRoot, "wavs")
-        metadataPath = Path.Combine(outputRoot, "metadata.csv")
-        lastPositionPath = Path.Combine(outputRoot, "last_position.txt")
-        Directory.CreateDirectory(wavsFolder)
+        Directory.CreateDirectory(scriptsFolder)
+        Directory.CreateDirectory(outputRoot)
+        EnsureDefaultScripts()
 
         InitUI()
-        LoadScript()
-        LoadExistingProgress()
-        LoadLastPosition()
+        PopulateScriptList()
+
+        If cmbScript.Items.Count = 0 Then
+            MessageBox.Show("Khong tim thay bo cau nao trong thu muc 'scripts'. Vui long them file .txt vao do roi mo lai app.",
+                             "Thieu du lieu", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            sentences.Add("Chua co bo cau nao. Them file .txt vao thu muc scripts roi mo lai app.")
+        End If
+
         PopulateDevices()
         ShowSentence()
     End Sub
@@ -71,7 +79,7 @@ Public Class MainForm
 
     Private Sub InitUI()
         Me.Text = "Voice Recorder - Thu am dataset TTS"
-        Me.ClientSize = New Size(780, 460)
+        Me.ClientSize = New Size(780, 490)
         Me.StartPosition = FormStartPosition.CenterScreen
         Me.KeyPreview = True
         Me.Font = New Font("Segoe UI", 10)
@@ -88,8 +96,19 @@ Public Class MainForm
         }
         Me.Controls.Add(cmbDevice)
 
+        lblScript = New Label() With {
+            .Location = New Point(20, 48), .Width = 90, .Text = "Kich ban:"
+        }
+        Me.Controls.Add(lblScript)
+
+        cmbScript = New ComboBox() With {
+            .Location = New Point(115, 45), .Width = 635, .DropDownStyle = ComboBoxStyle.DropDownList
+        }
+        AddHandler cmbScript.SelectedIndexChanged, AddressOf CmbScript_SelectedIndexChanged
+        Me.Controls.Add(cmbScript)
+
         lblSentence = New Label() With {
-            .Location = New Point(20, 55), .Width = 720, .Height = 140,
+            .Location = New Point(20, 85), .Width = 720, .Height = 140,
             .Font = New Font("Segoe UI", 18, FontStyle.Bold),
             .TextAlign = ContentAlignment.MiddleCenter,
             .BorderStyle = BorderStyle.FixedSingle
@@ -97,38 +116,38 @@ Public Class MainForm
         Me.Controls.Add(lblSentence)
 
         meterVolume = New ProgressBar() With {
-            .Location = New Point(20, 205), .Width = 720, .Height = 18, .Maximum = 100
+            .Location = New Point(20, 235), .Width = 720, .Height = 18, .Maximum = 100
         }
         Me.Controls.Add(meterVolume)
 
         lblStatus = New Label() With {
-            .Location = New Point(20, 232), .Width = 720, .Text = "San sang."
+            .Location = New Point(20, 262), .Width = 720, .Text = "San sang."
         }
         Me.Controls.Add(lblStatus)
 
-        btnPrev = New Button() With {.Location = New Point(20, 265), .Width = 120, .Height = 42, .Text = "<< Cau truoc"}
+        btnPrev = New Button() With {.Location = New Point(20, 295), .Width = 120, .Height = 42, .Text = "<< Cau truoc"}
         AddHandler btnPrev.Click, AddressOf BtnPrev_Click
         Me.Controls.Add(btnPrev)
 
-        btnRecord = New Button() With {.Location = New Point(155, 265), .Width = 210, .Height = 42, .Text = "Ghi am (Space)"}
+        btnRecord = New Button() With {.Location = New Point(155, 295), .Width = 210, .Height = 42, .Text = "Ghi am (Space)"}
         AddHandler btnRecord.Click, AddressOf BtnRecord_Click
         Me.Controls.Add(btnRecord)
 
-        btnPlay = New Button() With {.Location = New Point(380, 265), .Width = 150, .Height = 42, .Text = "Nghe lai (P)"}
+        btnPlay = New Button() With {.Location = New Point(380, 295), .Width = 150, .Height = 42, .Text = "Nghe lai (P)"}
         AddHandler btnPlay.Click, AddressOf BtnPlay_Click
         Me.Controls.Add(btnPlay)
 
-        btnNext = New Button() With {.Location = New Point(545, 265), .Width = 195, .Height = 42, .Text = "Cau tiep theo (Enter) >>"}
+        btnNext = New Button() With {.Location = New Point(545, 295), .Width = 195, .Height = 42, .Text = "Cau tiep theo (Enter) >>"}
         AddHandler btnNext.Click, AddressOf BtnNext_Click
         Me.Controls.Add(btnNext)
 
         progressOverall = New ProgressBar() With {
-            .Location = New Point(20, 325), .Width = 720, .Height = 25
+            .Location = New Point(20, 355), .Width = 720, .Height = 25
         }
         Me.Controls.Add(progressOverall)
 
         Dim lblHint As New Label() With {
-            .Location = New Point(20, 360), .Width = 720, .Height = 60,
+            .Location = New Point(20, 390), .Width = 720, .Height = 60,
             .ForeColor = Color.Gray,
             .Text = "Phim tat: Space = Bat dau/Dung ghi am | R = Thu lai | P = Nghe lai | Enter hoac mui ten phai = Cau tiep theo | Mui ten trai = Cau truoc"
         }
@@ -143,15 +162,100 @@ Public Class MainForm
 
     ' ===================== Load du lieu =====================
 
-    Private Sub LoadScript()
-        If Not File.Exists(scriptPath) Then
-            MessageBox.Show("Khong tim thay file script.txt cung thu muc voi file .exe.",
+    ' Neu thu muc scripts chua co bo cau nao: thu chuyen script.txt cu (ban truoc) vao do.
+    ' Ngoai ra, neu phat hien du lieu da thu cua ban cu (chi co 1 bo cau, luu thang trong
+    ' dataset\wavs) thi tu dong chuyen sang dataset\01_co_ban\ de khong mat tien do da lam.
+    Private Sub EnsureDefaultScripts()
+        Dim existingScripts = Directory.GetFiles(scriptsFolder, "*.txt")
+        If existingScripts.Length = 0 Then
+            Dim legacyScriptPath = Path.Combine(Application.StartupPath, "script.txt")
+            If File.Exists(legacyScriptPath) Then
+                Try
+                    File.Copy(legacyScriptPath, Path.Combine(scriptsFolder, "01_co_ban.txt"))
+                Catch
+                    ' bo qua neu khong copy duoc, PopulateScriptList se bao khong co bo cau
+                End Try
+            End If
+        End If
+
+        Dim legacyWavsFolder = Path.Combine(outputRoot, "wavs")
+        Dim migratedTarget = Path.Combine(outputRoot, "01_co_ban")
+        If Directory.Exists(legacyWavsFolder) AndAlso Not Directory.Exists(migratedTarget) Then
+            Try
+                Directory.CreateDirectory(migratedTarget)
+                Directory.Move(legacyWavsFolder, Path.Combine(migratedTarget, "wavs"))
+
+                Dim legacyMeta = Path.Combine(outputRoot, "metadata.csv")
+                If File.Exists(legacyMeta) Then File.Move(legacyMeta, Path.Combine(migratedTarget, "metadata.csv"))
+
+                Dim legacyPos = Path.Combine(outputRoot, "last_position.txt")
+                If File.Exists(legacyPos) Then File.Move(legacyPos, Path.Combine(migratedTarget, "last_position.txt"))
+            Catch
+                ' neu di chuyen loi thi bo qua, khong lam crash app; du lieu cu van con nguyen o dataset\wavs
+            End Try
+        End If
+    End Sub
+
+    ' Do danh sach tat ca bo cau (.txt) co trong thu muc scripts vao combo box
+    Private Sub PopulateScriptList()
+        cmbScript.Items.Clear()
+
+        Dim files = Directory.GetFiles(scriptsFolder, "*.txt")
+        Array.Sort(files)
+        For Each f In files
+            cmbScript.Items.Add(Path.GetFileNameWithoutExtension(f))
+        Next
+
+        If cmbScript.Items.Count > 0 Then
+            isLoadingScript = True
+            cmbScript.SelectedIndex = 0
+            isLoadingScript = False
+            LoadSelectedScript()
+        End If
+    End Sub
+
+    Private Sub CmbScript_SelectedIndexChanged(sender As Object, e As EventArgs)
+        If isLoadingScript Then Return
+        If isRecording Then StopRecording()
+        LoadSelectedScript()
+        ShowSentence()
+    End Sub
+
+    ' Nap bo cau dang duoc chon trong combo box: doc file cau, tro toi thu muc
+    ' dataset\<ten_bo_cau>\ rieng cho bo do, roi nap lai tien do/vi tri da lam dang do.
+    Private Sub LoadSelectedScript()
+        If cmbScript.SelectedItem Is Nothing Then Return
+
+        currentScriptName = cmbScript.SelectedItem.ToString()
+        Dim scriptFilePath = Path.Combine(scriptsFolder, currentScriptName & ".txt")
+
+        sentences.Clear()
+        recordedIndices.Clear()
+        currentIndex = 0
+
+        LoadScriptFile(scriptFilePath)
+
+        Dim scriptOutputRoot = Path.Combine(outputRoot, currentScriptName)
+        wavsFolder = Path.Combine(scriptOutputRoot, "wavs")
+        metadataPath = Path.Combine(scriptOutputRoot, "metadata.csv")
+        lastPositionPath = Path.Combine(scriptOutputRoot, "last_position.txt")
+        Directory.CreateDirectory(wavsFolder)
+
+        LoadExistingProgress()
+        LoadLastPosition()
+
+        Me.Text = $"Voice Recorder - Thu am dataset TTS  [{currentScriptName}]"
+    End Sub
+
+    Private Sub LoadScriptFile(path As String)
+        If Not File.Exists(path) Then
+            MessageBox.Show($"Khong tim thay file: {Path.GetFileName(path)}",
                              "Loi", MessageBoxButtons.OK, MessageBoxIcon.Error)
             sentences.Add("Khong co cau mau nao duoc tai.")
             Return
         End If
 
-        For Each line In File.ReadAllLines(scriptPath)
+        For Each line In File.ReadAllLines(path)
             Dim trimmed = line.Trim()
             If trimmed.Length > 0 Then
                 sentences.Add(trimmed)
