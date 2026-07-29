@@ -1,0 +1,28 @@
+Cac thay doi trong MainForm.vb so voi ban truoc:
+
+1. Them Imports System.Linq (de dung .Count(predicate) khi tinh tong tien do).
+
+2. Them 3 control moi trong InitUI():
+   - txtJumpTo (TextBox) + btnJumpTo (Button "Di toi"): nhap so cau roi bam "Di toi"
+     hoac Enter (khi dang focus trong o nay) de nhay thang toi cau do, khong can bam
+     Next lien tuc.
+   - lblOverallProgress (Label): hien tong tien do GOP TAT CA cac kich ban, dang
+     "Tong dataset: X / Y cau (Z%)", nam cung hang voi o "Di toi cau".
+
+3. Form cao them (490 -> 520px) va cac control ben duoi (nut Ghi am/Nghe lai/
+   Cau truoc/Cau tiep, thanh progressOverall, dong hint) doi vi tri xuong de
+   khong bi chong len hang moi.
+
+4. Ham moi:
+   - ComputeOverallProgress(): quet tat ca file .txt trong scripts\ + metadata.csv
+     tuong ung trong dataset\ de tinh tong so cau / so cau da thu toan bo du an.
+   - UpdateOverallProgressLabel(): cap nhat lblOverallProgress, duoc goi moi lan
+     ShowSentence() chay (tuc la sau moi lan ghi am, chuyen cau, doi kich ban...).
+   - BtnJumpTo_Click() / JumpToSentence(): xu ly nhay toi cau nhap trong txtJumpTo,
+     co kiem tra hop le (phai la so, trong khoang 1..tong so cau).
+
+5. Sua MainForm_KeyDown(): khi txtJumpTo dang duoc focus, cac phim tat toan cuc
+   (Space/R/P/mui ten...) KHONG con duoc bat nua de tranh xung dot voi viec go so/
+   sua o textbox; chi rieng phim Enter van duoc bat de kich hoat nhay cau.
+
+Ghi de: hanh vi "R = thu lai / ghi de" duoc GIU NGUYEN nhu cu, khong doi.

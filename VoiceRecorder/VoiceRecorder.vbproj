@@ -15,10 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- script.txt se duoc copy ra thu muc build de app doc duoc luc chay -->
+    <!-- script.txt se duoc copy ra thu muc build de app doc duoc luc chay 
     <None Include="script.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+	-->
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
 Imports System.IO
+Imports System.Linq
 Imports System.Drawing
 Imports System.Windows.Forms
 Imports NAudio.Wave
@@ -54,6 +55,9 @@ Public Class MainForm
     Private btnPlay As Button
     Private btnPrev As Button
     Private btnNext As Button
+    Private txtJumpTo As TextBox
+    Private btnJumpTo As Button
+    Private lblOverallProgress As Label
     Private meterTimer As Timer
     Private isLoadingScript As Boolean = False
 
@@ -79,7 +83,7 @@ Public Class MainForm
 
     Private Sub InitUI()
         Me.Text = "Voice Recorder - Thu am dataset TTS"
-        Me.ClientSize = New Size(780, 490)
+        Me.ClientSize = New Size(780, 520)
         Me.StartPosition = FormStartPosition.CenterScreen
         Me.KeyPreview = True
         Me.Font = New Font("Segoe UI", 10)
@@ -125,31 +129,55 @@ Public Class MainForm
         }
         Me.Controls.Add(lblStatus)
 
-        btnPrev = New Button() With {.Location = New Point(20, 295), .Width = 120, .Height = 42, .Text = "<< Cau truoc"}
+        Dim lblJump As New Label() With {
+            .Location = New Point(20, 291), .Width = 90, .Text = "Di toi cau:"
+        }
+        Me.Controls.Add(lblJump)
+
+        txtJumpTo = New TextBox() With {
+            .Location = New Point(115, 288), .Width = 60
+        }
+        Me.Controls.Add(txtJumpTo)
+
+        btnJumpTo = New Button() With {
+            .Location = New Point(182, 286), .Width = 75, .Height = 28, .Text = "Di toi"
+        }
+        AddHandler btnJumpTo.Click, AddressOf BtnJumpTo_Click
+        Me.Controls.Add(btnJumpTo)
+
+        lblOverallProgress = New Label() With {
+            .Location = New Point(270, 291), .Width = 470, .Height = 20,
+            .TextAlign = ContentAlignment.MiddleRight,
+            .ForeColor = Color.FromArgb(0, 90, 160),
+            .Text = "Tong dataset: 0 / 0 cau (0%)"
+        }
+        Me.Controls.Add(lblOverallProgress)
+
+        btnPrev = New Button() With {.Location = New Point(20, 328), .Width = 120, .Height = 42, .Text = "<< Cau truoc"}
         AddHandler btnPrev.Click, AddressOf BtnPrev_Click
         Me.Controls.Add(btnPrev)
 
-        btnRecord = New Button() With {.Location = New Point(155, 295), .Width = 210, .Height = 42, .Text = "Ghi am (Space)"}
+        btnRecord = New Button() With {.Location = New Point(155, 328), .Width = 210, .Height = 42, .Text = "Ghi am (Space)"}
         AddHandler btnRecord.Click, AddressOf BtnRecord_Click
         Me.Controls.Add(btnRecord)
 
-        btnPlay = New Button() With {.Location = New Point(380, 295), .Width = 150, .Height = 42, .Text = "Nghe lai (P)"}
+        btnPlay = New Button() With {.Location = New Point(380, 328), .Width = 150, .Height = 42, .Text = "Nghe lai (P)"}
         AddHandler btnPlay.Click, AddressOf BtnPlay_Click
         Me.Controls.Add(btnPlay)
 
-        btnNext = New Button() With {.Location = New Point(545, 295), .Width = 195, .Height = 42, .Text = "Cau tiep theo (Enter) >>"}
+        btnNext = New Button() With {.Location = New Point(545, 328), .Width = 195, .Height = 42, .Text = "Cau tiep theo (Enter) >>"}
         AddHandler btnNext.Click, AddressOf BtnNext_Click
         Me.Controls.Add(btnNext)
 
         progressOverall = New ProgressBar() With {
-            .Location = New Point(20, 355), .Width = 720, .Height = 25
+            .Location = New Point(20, 388), .Width = 720, .Height = 25
         }
         Me.Controls.Add(progressOverall)
 
         Dim lblHint As New Label() With {
-            .Location = New Point(20, 390), .Width = 720, .Height = 60,
+            .Location = New Point(20, 423), .Width = 720, .Height = 60,
             .ForeColor = Color.Gray,
-            .Text = "Phim tat: Space = Bat dau/Dung ghi am | R = Thu lai | P = Nghe lai | Enter hoac mui ten phai = Cau tiep theo | Mui ten trai = Cau truoc"
+            .Text = "Phim tat: Space = Bat dau/Dung ghi am | R = Thu lai | P = Nghe lai | Enter hoac mui ten phai = Cau tiep theo | Mui ten trai = Cau truoc | Go so vao o 'Di toi cau' roi Enter de nhay nhanh"
         }
         Me.Controls.Add(lblHint)
 
@@ -333,6 +361,62 @@ Public Class MainForm
         lblSentence.BackColor = If(hasRecording, Color.FromArgb(220, 255, 220), Color.White)
 
         SaveLastPosition()
+        UpdateOverallProgressLabel()
+    End Sub
+
+    ' Tinh tong so cau va tong so cau da thu tren TAT CA cac kich ban (goi khi can hien thi
+    ' tong tien do toan bo dataset, khong chi rieng kich ban dang chon).
+    Private Function ComputeOverallProgress() As (total As Integer, recorded As Integer)
+        Dim total As Integer = 0
+        Dim recorded As Integer = 0
+
+        Try
+            For Each scriptFile In Directory.GetFiles(scriptsFolder, "*.txt")
+                Dim name = Path.GetFileNameWithoutExtension(scriptFile)
+                Dim lineCount = File.ReadAllLines(scriptFile).Count(Function(l) l.Trim().Length > 0)
+                total += lineCount
+
+                Dim metaPath = Path.Combine(outputRoot, name, "metadata.csv")
+                If File.Exists(metaPath) Then
+                    recorded += File.ReadAllLines(metaPath).Count(Function(l) l.Trim().Length > 0)
+                End If
+            Next
+        Catch
+            ' neu doc file loi giua chung thi tra ve gia tri da tinh duoc, khong lam crash app
+        End Try
+
+        Return (total, recorded)
+    End Function
+
+    Private Sub UpdateOverallProgressLabel()
+        Dim result = ComputeOverallProgress()
+        Dim pct As Integer = If(result.total > 0, CInt(Math.Round(result.recorded / result.total * 100)), 0)
+        lblOverallProgress.Text = $"Tong dataset: {result.recorded} / {result.total} cau ({pct}%)"
+    End Sub
+
+    ' ===================== Nhay nhanh toi cau =====================
+
+    Private Sub BtnJumpTo_Click(sender As Object, e As EventArgs)
+        JumpToSentence()
+    End Sub
+
+    Private Sub JumpToSentence()
+        If sentences.Count = 0 Then Return
+
+        Dim num As Integer
+        If Not Integer.TryParse(txtJumpTo.Text.Trim(), num) Then
+            MessageBox.Show("Vui long nhap mot so hop le.", "Sai dinh dang", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        If num < 1 OrElse num > sentences.Count Then
+            MessageBox.Show($"Vui long nhap so tu 1 den {sentences.Count}.", "So cau khong hop le", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+
+        If isRecording Then StopRecording()
+        currentIndex = num - 1
+        ShowSentence()
     End Sub
 
     Private Function GetFileId(index As Integer) As String
@@ -557,6 +641,17 @@ Public Class MainForm
     End Sub
 
     Private Sub MainForm_KeyDown(sender As Object, e As KeyEventArgs)
+        ' Khi dang go so trong o "Di toi cau", chi bat phim Enter de nhay cau; cac phim
+        ' khac (so, mui ten trai/phai, xoa...) de textbox tu xu ly binh thuong.
+        If txtJumpTo.Focused Then
+            If e.KeyCode = Keys.Enter Then
+                JumpToSentence()
+                e.Handled = True
+                e.SuppressKeyPress = True
+            End If
+            Return
+        End If
+
         Select Case e.KeyCode
             Case Keys.Space
                 ToggleRecording()

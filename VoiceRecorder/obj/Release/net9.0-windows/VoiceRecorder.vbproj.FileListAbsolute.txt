@@ -3,7 +3,6 @@ C:\Users\Administrator\Downloads\VoiceRecord\VoiceRecorder\obj\Release\net9.0-wi
 C:\Users\Administrator\Downloads\VoiceRecord\VoiceRecorder\obj\Release\net9.0-windows\VoiceRecorder.AssemblyInfoInputs.cache
 C:\Users\Administrator\Downloads\VoiceRecord\VoiceRecorder\obj\Release\net9.0-windows\VoiceRecorder.AssemblyInfo.vb
 C:\Users\Administrator\Downloads\VoiceRecord\VoiceRecorder\obj\Release\net9.0-windows\VoiceRecorder.vbproj.CoreCompileInputs.cache
-D:\Source Code\Tool-Video\VoiceRecorder\VoiceRecorder\bin\Release\net9.0-windows\script.txt
 D:\Source Code\Tool-Video\VoiceRecorder\VoiceRecorder\bin\Release\net9.0-windows\VoiceRecorder.exe
 D:\Source Code\Tool-Video\VoiceRecorder\VoiceRecorder\bin\Release\net9.0-windows\VoiceRecorder.deps.json
 D:\Source Code\Tool-Video\VoiceRecorder\VoiceRecorder\bin\Release\net9.0-windows\VoiceRecorder.runtimeconfig.json
