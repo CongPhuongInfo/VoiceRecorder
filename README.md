@@ -1,4 +1,7 @@
 # VoiceRecorder
+<p align="center">
+  <img src="VoiceRecorder-logo.png" width="800">
+</p>
 
 Tool thu âm dataset để train TTS (Piper) bằng chính giọng của bạn.
 VB.NET, .NET 9, WinForms, dùng NAudio để ghi âm và convert audio.
