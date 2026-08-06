@@ -57,39 +57,53 @@ Thêm/sửa file `.txt` trong thư mục `scripts\` (mỗi dòng 1 câu, tên fi
 | `05_am_thuc_mon_an.txt` | Ẩm thực, món ăn | 41 |
 | `06_du_lich.txt` | Du lịch | 40 |
 | `07_da_ngoai.txt` | Dã ngoại, cắm trại | 36 |
-| `08_cam_xuc.txt` | Cảm xúc | 36 |
+| `08_cam_xuc.txt` | Cảm xúc (tổng quát: vui, buồn, lo lắng, tự hào...) | 36 |
 | `09_hai_huoc.txt` | Hài hước | 30 |
 | `10_the_thao.txt` | Thể thao | 30 |
 | `11_cong_nghe.txt` | Công nghệ | 30 |
 | `12_kinh_doanh.txt` | Kinh doanh | 30 |
 | `13_cau_menh_lenh.txt` | Câu mệnh lệnh (ra lệnh, cấm, khuyên, hướng dẫn từng bước) | 40 |
 | `14_tu_muon_viet_tat.txt` | Từ viết tắt, từ mượn tiếng Anh xen kẽ (email, wifi, marketing...) | 30 |
-| **Tổng cộng** | | **~553 câu** |
+| `15_gia_dinh.txt` | Gia đình | 30 |
+| `16_suc_khoe_y_te.txt` | Sức khỏe, y tế | 30 |
+| `17_thoi_tiet.txt` | Thời tiết | 30 |
+| `18_giao_duc.txt` | Giáo dục, học tập | 30 |
+| `19_thien_nhien_moi_truong.txt` | Thiên nhiên, môi trường | 30 |
+| `20_tai_chinh_ca_nhan.txt` | Tài chính cá nhân | 30 |
+| `21_am_nhac_nghe_thuat.txt` | Âm nhạc, nghệ thuật | 30 |
+| `22_tin_tuc_thoi_su.txt` | Tin tức, thời sự | 30 |
+| `23_tinh_cam.txt` | Tình cảm, yêu đương | 30 |
+| `24_giao_tiep_xa_giao.txt` | Giao tiếp xã giao (chào hỏi, cảm ơn, xin lỗi, chúc mừng) | 30 |
+| `25_cam_xuc_buc_boi.txt` | Cảm xúc bực bội, khó chịu, cáu gắt | 30 |
+| `26_mua_sam.txt` | Mua sắm, mặc cả | 30 |
+| `27_nha_cua_noi_that.txt` | Nhà cửa, nội thất, sửa chữa | 30 |
+| `28_giao_thong_di_lai.txt` | Giao thông, đi lại hằng ngày | 30 |
+| `29_thu_cung.txt` | Thú cưng | 30 |
+| `30_nuoi_day_con.txt` | Nuôi dạy con cái | 30 |
+| `31_thoi_trang_lam_dep.txt` | Thời trang, làm đẹp | 30 |
+| `32_le_hoi_ton_giao.txt` | Lễ hội, tôn giáo, tâm linh | 30 |
+| `33_phap_luat_hanh_chinh.txt` | Pháp luật, giấy tờ hành chính | 30 |
+| `34_phim_anh_truyen_hinh.txt` | Phim ảnh, truyền hình | 30 |
+| `35_cong_so_doi_thuong.txt` | Công sở đời thường | 30 |
+| `36_xin_loi_hoi_loi.txt` | Xin lỗi, hối lỗi | 30 |
+| `37_an_ui_dong_vien.txt` | An ủi, động viên | 30 |
+| `38_mia_mai_cham_biem.txt` | Mỉa mai, châm biếm nhẹ | 30 |
+| `39_game_giai_tri.txt` | Game, giải trí | 30 |
+| `40_xung_ho_da_dang.txt` | Xưng hô đa dạng (anh/em/chị/cô/dì/chú/bác/ông/bà/cậu/mợ/thím/con/cháu) | 35 |
+| **Tổng cộng** | | **~1338 câu** |
 
-Ước tính ~553 câu, đọc trung bình 3-4 giây/câu → khoảng **30-40 phút audio** nếu thu hết. Đủ để train thử; càng nhiều càng tốt cho chất lượng giọng.
+Ước tính ~1338 câu, đọc trung bình 3-4 giây/câu → khoảng **75-90 phút audio** nếu thu hết. Không bắt buộc thu hết 100%: thu khoảng 800-1000 câu sạch (ưu tiên đọc trải đều nhiều chủ đề thay vì thu trọn từng file) là đã đủ tốt cho fine-tune Piper (khuyến nghị tối thiểu ~30-60 phút).
 
 ### Chưa có — cân nhắc bổ sung
 
-Theo chủ đề nội dung:
-
-- [ ] Sức khỏe, y tế (khám bệnh, thuốc men, dinh dưỡng)
-- [ ] Giáo dục, học tập (trường lớp, thi cử, giảng dạy)
-- [ ] Gia đình, các mối quan hệ
-- [ ] Thiên nhiên, môi trường, thời tiết
-- [ ] Tin tức, thời sự, xã hội (câu trung tính, khách quan)
-- [ ] Tâm linh, tín ngưỡng, lễ hội truyền thống
-- [ ] Xe cộ, giao thông
-- [ ] Thời trang, làm đẹp
-
-Theo dạng câu/ngữ điệu (giúp giọng đọc tự nhiên hơn trong nhiều tình huống, không phụ thuộc chủ đề):
-
+- [ ] Thuật ngữ IT / lập trình (biến, hàm, compile, debug, deploy...) — hữu ích nếu app dùng để đọc log/thông báo kỹ thuật
+- [ ] Phỏng vấn xin việc
 - [ ] Câu phủ định phức tạp (nhiều lớp phủ định trong 1 câu)
-- [ ] Số đếm lớn, đơn vị đo lường, tiền tệ mở rộng (đã có cơ bản ở `03`, có thể bổ sung thêm số phức tạp hơn)
 - [ ] Tên riêng, địa danh, thương hiệu (để model học phát âm tên riêng)
 - [ ] Câu dài, phức, nhiều mệnh đề
 - [ ] Câu rất ngắn, một hai từ (để học cách ngắt nghỉ)
 
-> Khi thêm bộ mới, đặt tên file theo số thứ tự tiếp theo (`15_...`, `16_...`) và cập nhật bảng này để dễ theo dõi.
+> Khi thêm bộ mới, đặt tên file theo số thứ tự tiếp theo (`41_...`, `42_...`) và cập nhật bảng này để dễ theo dõi.
 
 ## Lưu ý thu âm
 
@@ -99,6 +113,17 @@ Theo dạng câu/ngữ điệu (giúp giọng đọc tự nhiên hơn trong nhi�
 - Nếu thu nhiều buổi/nhiều ngày, cố giữ **âm lượng và khoảng cách mic đều nhau** giữa các buổi để dataset đồng nhất.
 - Mệt hoặc khàn giọng giữa chừng thì nên nghỉ, thu tiếp lúc khác — giọng gằn vì mệt sẽ ảnh hưởng chất lượng model.
 - Không cần đợi thu hết mới train thử: thu khoảng 100–150 câu đầu có thể train thử ngay để phát hiện sớm vấn đề (mic rè, sai format...), tránh tốn công thu hết cả trăm câu rồi mới phát hiện lỗi. Xem thêm mục "Train theo nhiều đợt" bên dưới.
+
+### Giữ chung một chất giọng, kể cả với câu cảm xúc
+
+Piper là TTS **một giọng, một tông** (single-style), không phải model biểu cảm đa dạng theo ngữ cảnh. Vì vậy:
+
+- **Đọc TẤT CẢ câu bằng đúng một chất giọng, một tông, một mức năng lượng** — kể cả các câu ở những bộ mang tính cảm xúc như `08_cam_xuc`, `25_cam_xuc_buc_boi`, `36_xin_loi_hoi_loi`, `37_an_ui_dong_vien`, `38_mia_mai_cham_biem`, `23_tinh_cam`...
+- **Không "diễn" cảm xúc thật của câu.** Đọc câu *"Tôi tức điên lên vì bị đổ lỗi oan uổng"* bằng đúng tông giọng như khi đọc *"Hôm nay trời nắng đẹp"* — không gằn giọng tức giận, không nghẹn ngào khi buồn, không phấn khích quá đà khi vui.
+- **Ngữ điệu theo dấu câu thì vẫn giữ tự nhiên** — câu hỏi (`?`) lên giọng cuối câu, câu cảm thán (`!`) nhấn nhẹ, ngắt hơi đúng chỗ ở câu dài. Đây là ngữ điệu cấu trúc câu, khác với việc diễn cảm xúc thật.
+- Lý do: nếu chất giọng thay đổi theo cảm xúc từng câu, dataset sẽ chứa nhiều "phong cách" khác nhau trong cùng một giọng nói → model học ra sẽ nhiễu, giọng tổng hợp cuối cùng có thể bất ngờ lên tông gắt hoặc trầm ở những chỗ không đáng, nghe không ổn định.
+- Coi các bộ mang chủ đề cảm xúc như nguồn **mở rộng vốn từ vựng, cấu trúc câu đa dạng** để model phát âm đúng nhiều loại câu — không phải bài tập luyện diễn xuất giọng đọc.
+- Có thể trộn ngẫu nhiên các chủ đề trong một buổi thu (không cần đọc tuần tự hết từng file) để tránh bị "cuốn" theo cảm xúc của một chủ đề liên tục.
 
 ## Bước tiếp theo: train giọng thành file `.onnx`
 

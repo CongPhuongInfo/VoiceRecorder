@@ -15,7 +15,7 @@ Imports System.Reflection
 <Assembly: System.Reflection.AssemblyCompanyAttribute("VoiceRecorder"),  _
  Assembly: System.Reflection.AssemblyConfigurationAttribute("Release"),  _
  Assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0"),  _
- Assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a8ee6b4f6e2f6c2e7b6f4de42a7f71656b42feb5"),  _
+ Assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7a796c28a339096fe2caa9e057560482b481054e"),  _
  Assembly: System.Reflection.AssemblyProductAttribute("VoiceRecorder"),  _
  Assembly: System.Reflection.AssemblyTitleAttribute("VoiceRecorder"),  _
  Assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0"),  _

@@ -1,5 +1,7 @@
 Imports System.IO
+Imports System.IO.Compression
 Imports System.Linq
+Imports System.Threading.Tasks
 Imports System.Drawing
 Imports System.Windows.Forms
 Imports NAudio.Wave
@@ -29,6 +31,16 @@ Public Class MainForm
     Private Const MAX_CLIP_RATIO As Double = 0.02   ' 2% so mau bi vo tieng
     Private Const CLIP_SAMPLE_THRESHOLD As Integer = 32000 ' gan max cua Int16 (32767)
 
+    ' ===== Xu ly nang cao ban ghi: cat khoang lang + chuan hoa am luong =====
+    Private Const TRIM_SILENCE_THRESHOLD As Single = 0.02F  ' bien do duoi nguong nay coi la khoang lang
+    Private Const TRIM_PADDING_MS As Integer = 80           ' giu lai it dem 2 dau de khong cat cut tu
+    Private Const TARGET_PEAK As Single = 0.9F              ' muc bien do dinh muon dat toi sau chuan hoa
+    Private Const MAX_NORMALIZE_GAIN As Single = 6.0F       ' gioi han khuech dai, tranh khuech dai qua on nen
+
+    ' ===== Dem nguoc truoc khi ghi that + canh bao on nen =====
+    Private Const PRE_RECORD_COUNTDOWN_SECONDS As Integer = 2
+    Private Const AMBIENT_NOISE_WARN_THRESHOLD As Single = 0.05F
+
     ' ===== NAudio =====
     Private waveIn As WaveInEvent
     Private tempWriter As WaveFileWriter
@@ -36,11 +48,23 @@ Public Class MainForm
     Private isRecording As Boolean = False
     Private currentVolume As Single = 0
 
-    ' thong ke chat luong cho lan ghi hien tai
+    ' thong ke chat luong cho lan ghi hien tai (chi tinh phan SAU khi dem nguoc xong)
     Private recSampleCount As Long = 0
     Private recClippedCount As Long = 0
     Private recPeakLevel As Single = 0
     Private recSampleRate As Integer = 44100
+
+    ' ===== Dem nguoc & huy ghi =====
+    Private isCountingDown As Boolean = False
+    Private countdownRemaining As Integer = 0
+    Private ambientPeak As Single = 0
+    Private cancelPending As Boolean = False
+    Private countdownTimer As Timer
+    Private autoNextTimer As Timer
+
+    ' ===== Waveform live khi dang ghi =====
+    Private Const LIVE_WAVEFORM_CAPACITY As Integer = 400
+    Private liveWaveformPeaks As New List(Of Single)
 
     ' ===== UI controls =====
     Private lblProgress As Label
@@ -51,6 +75,7 @@ Public Class MainForm
     Private cmbScript As ComboBox
     Private progressOverall As ProgressBar
     Private meterVolume As ProgressBar
+    Private waveformPanel As WaveformPanel
     Private btnRecord As Button
     Private btnPlay As Button
     Private btnPrev As Button
@@ -58,6 +83,9 @@ Public Class MainForm
     Private txtJumpTo As TextBox
     Private btnJumpTo As Button
     Private lblOverallProgress As Label
+    Private lblTotalDuration As Label
+    Private chkAutoNext As CheckBox
+    Private btnExportZip As Button
     Private meterTimer As Timer
     Private isLoadingScript As Boolean = False
 
@@ -83,7 +111,7 @@ Public Class MainForm
 
     Private Sub InitUI()
         Me.Text = "Voice Recorder - Thu am dataset TTS"
-        Me.ClientSize = New Size(780, 520)
+        Me.ClientSize = New Size(780, 596)
         Me.StartPosition = FormStartPosition.CenterScreen
         Me.KeyPreview = True
         Me.Font = New Font("Segoe UI", 10)
@@ -119,65 +147,90 @@ Public Class MainForm
         }
         Me.Controls.Add(lblSentence)
 
+        waveformPanel = New WaveformPanel() With {
+            .Location = New Point(20, 232), .Width = 720, .Height = 70
+        }
+        Me.Controls.Add(waveformPanel)
+
         meterVolume = New ProgressBar() With {
-            .Location = New Point(20, 235), .Width = 720, .Height = 18, .Maximum = 100
+            .Location = New Point(20, 306), .Width = 720, .Height = 14, .Maximum = 100
         }
         Me.Controls.Add(meterVolume)
 
         lblStatus = New Label() With {
-            .Location = New Point(20, 262), .Width = 720, .Text = "San sang."
+            .Location = New Point(20, 324), .Width = 720, .Text = "San sang."
         }
         Me.Controls.Add(lblStatus)
 
         Dim lblJump As New Label() With {
-            .Location = New Point(20, 291), .Width = 90, .Text = "Di toi cau:"
+            .Location = New Point(20, 352), .Width = 90, .Text = "Di toi cau:"
         }
         Me.Controls.Add(lblJump)
 
         txtJumpTo = New TextBox() With {
-            .Location = New Point(115, 288), .Width = 60
+            .Location = New Point(115, 349), .Width = 60
         }
         Me.Controls.Add(txtJumpTo)
 
         btnJumpTo = New Button() With {
-            .Location = New Point(182, 286), .Width = 75, .Height = 28, .Text = "Di toi"
+            .Location = New Point(182, 347), .Width = 75, .Height = 28, .Text = "Di toi"
         }
         AddHandler btnJumpTo.Click, AddressOf BtnJumpTo_Click
         Me.Controls.Add(btnJumpTo)
 
         lblOverallProgress = New Label() With {
-            .Location = New Point(270, 291), .Width = 470, .Height = 20,
+            .Location = New Point(270, 352), .Width = 470, .Height = 20,
             .TextAlign = ContentAlignment.MiddleRight,
             .ForeColor = Color.FromArgb(0, 90, 160),
             .Text = "Tong dataset: 0 / 0 cau (0%)"
         }
         Me.Controls.Add(lblOverallProgress)
 
-        btnPrev = New Button() With {.Location = New Point(20, 328), .Width = 120, .Height = 42, .Text = "<< Cau truoc"}
+        lblTotalDuration = New Label() With {
+            .Location = New Point(270, 376), .Width = 470, .Height = 20,
+            .TextAlign = ContentAlignment.MiddleRight,
+            .ForeColor = Color.Gray,
+            .Text = "Tong thoi luong da thu: 0 phut 0 giay"
+        }
+        Me.Controls.Add(lblTotalDuration)
+
+        btnPrev = New Button() With {.Location = New Point(20, 406), .Width = 120, .Height = 42, .Text = "<< Cau truoc"}
         AddHandler btnPrev.Click, AddressOf BtnPrev_Click
         Me.Controls.Add(btnPrev)
 
-        btnRecord = New Button() With {.Location = New Point(155, 328), .Width = 210, .Height = 42, .Text = "Ghi am (Space)"}
+        btnRecord = New Button() With {.Location = New Point(155, 406), .Width = 210, .Height = 42, .Text = "Ghi am (Space)"}
         AddHandler btnRecord.Click, AddressOf BtnRecord_Click
         Me.Controls.Add(btnRecord)
 
-        btnPlay = New Button() With {.Location = New Point(380, 328), .Width = 150, .Height = 42, .Text = "Nghe lai (P)"}
+        btnPlay = New Button() With {.Location = New Point(380, 406), .Width = 150, .Height = 42, .Text = "Nghe lai (P)"}
         AddHandler btnPlay.Click, AddressOf BtnPlay_Click
         Me.Controls.Add(btnPlay)
 
-        btnNext = New Button() With {.Location = New Point(545, 328), .Width = 195, .Height = 42, .Text = "Cau tiep theo (Enter) >>"}
+        btnNext = New Button() With {.Location = New Point(545, 406), .Width = 195, .Height = 42, .Text = "Cau tiep theo (Enter) >>"}
         AddHandler btnNext.Click, AddressOf BtnNext_Click
         Me.Controls.Add(btnNext)
 
+        chkAutoNext = New CheckBox() With {
+            .Location = New Point(20, 456), .Width = 300, .Height = 24,
+            .Text = "Tu dong sang cau tiep sau khi luu (auto-next)"
+        }
+        Me.Controls.Add(chkAutoNext)
+
+        btnExportZip = New Button() With {
+            .Location = New Point(545, 452), .Width = 195, .Height = 30, .Text = "Xuat dataset (.zip)"
+        }
+        AddHandler btnExportZip.Click, AddressOf BtnExportZip_Click
+        Me.Controls.Add(btnExportZip)
+
         progressOverall = New ProgressBar() With {
-            .Location = New Point(20, 388), .Width = 720, .Height = 25
+            .Location = New Point(20, 490), .Width = 720, .Height = 22
         }
         Me.Controls.Add(progressOverall)
 
         Dim lblHint As New Label() With {
-            .Location = New Point(20, 423), .Width = 720, .Height = 60,
+            .Location = New Point(20, 518), .Width = 720, .Height = 60,
             .ForeColor = Color.Gray,
-            .Text = "Phim tat: Space = Bat dau/Dung ghi am | R = Thu lai | P = Nghe lai | Enter hoac mui ten phai = Cau tiep theo | Mui ten trai = Cau truoc | Go so vao o 'Di toi cau' roi Enter de nhay nhanh"
+            .Text = "Phim tat: Space = Bat dau/Dung ghi am (bam lai Space trong luc dem nguoc de huy) | R = Thu lai | P = Nghe lai | Enter hoac mui ten phai = Cau tiep theo | Mui ten trai = Cau truoc | Go so vao o 'Di toi cau' roi Enter de nhay nhanh"
         }
         Me.Controls.Add(lblHint)
 
@@ -186,6 +239,12 @@ Public Class MainForm
         meterTimer = New Timer() With {.Interval = 50}
         AddHandler meterTimer.Tick, AddressOf MeterTimer_Tick
         meterTimer.Start()
+
+        countdownTimer = New Timer() With {.Interval = 1000}
+        AddHandler countdownTimer.Tick, AddressOf CountdownTimer_Tick
+
+        autoNextTimer = New Timer() With {.Interval = 800}
+        AddHandler autoNextTimer.Tick, AddressOf AutoNextTimer_Tick
     End Sub
 
     ' ===================== Load du lieu =====================
@@ -244,6 +303,7 @@ Public Class MainForm
 
     Private Sub CmbScript_SelectedIndexChanged(sender As Object, e As EventArgs)
         If isLoadingScript Then Return
+        If isCountingDown Then CancelCountdown()
         If isRecording Then StopRecording()
         LoadSelectedScript()
         ShowSentence()
@@ -360,6 +420,15 @@ Public Class MainForm
         btnPlay.Enabled = hasRecording
         lblSentence.BackColor = If(hasRecording, Color.FromArgb(220, 255, 220), Color.White)
 
+        ' Khong dong vao waveform panel neu dang ghi/dem nguoc (de khong lam gian doan hien thi live)
+        If Not isRecording AndAlso Not isCountingDown Then
+            If hasRecording Then
+                LoadWaveformPreview(GetFileId(currentIndex))
+            Else
+                waveformPanel.Clear()
+            End If
+        End If
+
         SaveLastPosition()
         UpdateOverallProgressLabel()
     End Sub
@@ -388,10 +457,41 @@ Public Class MainForm
         Return (total, recorded)
     End Function
 
+    ' Quet toan bo file .wav da luu (tat ca kich ban) de tinh tong thoi luong audio.
+    ' Dung truc tiep kich thuoc file (PCM 16-bit, header 44 byte chuan) de tinh nhanh,
+    ' khong can mo tung file bang thu vien audio.
+    Private Function ComputeTotalDurationSeconds() As Double
+        Dim total As Double = 0
+        Try
+            For Each scriptFile In Directory.GetFiles(scriptsFolder, "*.txt")
+                Dim name = Path.GetFileNameWithoutExtension(scriptFile)
+                Dim wFolder = Path.Combine(outputRoot, name, "wavs")
+                If Directory.Exists(wFolder) Then
+                    For Each wavFile In Directory.GetFiles(wFolder, "*.wav")
+                        Try
+                            Dim info As New FileInfo(wavFile)
+                            Dim dataBytes = Math.Max(0L, info.Length - 44L)
+                            total += dataBytes / (TARGET_SAMPLE_RATE * 2.0)
+                        Catch
+                            ' bo qua file loi, khong lam sai lech qua nhieu tong so
+                        End Try
+                    Next
+                End If
+            Next
+        Catch
+            ' neu doc thu muc loi thi tra ve gia tri da cong duoc
+        End Try
+        Return total
+    End Function
+
     Private Sub UpdateOverallProgressLabel()
         Dim result = ComputeOverallProgress()
         Dim pct As Integer = If(result.total > 0, CInt(Math.Round(result.recorded / result.total * 100)), 0)
         lblOverallProgress.Text = $"Tong dataset: {result.recorded} / {result.total} cau ({pct}%)"
+
+        Dim totalSeconds = ComputeTotalDurationSeconds()
+        Dim ts = TimeSpan.FromSeconds(totalSeconds)
+        lblTotalDuration.Text = $"Tong thoi luong da thu: {CInt(ts.TotalMinutes)} phut {ts.Seconds} giay"
     End Sub
 
     ' ===================== Nhay nhanh toi cau =====================
@@ -414,6 +514,7 @@ Public Class MainForm
             Return
         End If
 
+        If isCountingDown Then CancelCountdown()
         If isRecording Then StopRecording()
         currentIndex = num - 1
         ShowSentence()
@@ -430,13 +531,17 @@ Public Class MainForm
     End Sub
 
     Private Sub ToggleRecording()
-        If isRecording Then
+        If isCountingDown Then
+            CancelCountdown()
+        ElseIf isRecording Then
             StopRecording()
         Else
             StartRecording()
         End If
     End Sub
 
+    ' Bat dau: mo mic va bat WaveIn ngay (de do duoc on nen trong luc dem nguoc), nhung
+    ' CHI ghi vao file tam sau khi dem nguoc ket thuc (xem WaveIn_DataAvailable).
     Private Sub StartRecording()
         If sentences.Count = 0 Then Return
         If cmbDevice.SelectedIndex < 0 Then
@@ -460,12 +565,54 @@ Public Class MainForm
         recClippedCount = 0
         recPeakLevel = 0
         recSampleRate = waveIn.WaveFormat.SampleRate
+        ambientPeak = 0
+        cancelPending = False
+
+        liveWaveformPeaks.Clear()
+        waveformPanel.Clear()
+
+        isCountingDown = True
+        countdownRemaining = PRE_RECORD_COUNTDOWN_SECONDS
+        btnRecord.Text = $"Chuan bi... {countdownRemaining}"
+        lblStatus.Text = "Chuan bi doc cau, giu yen lang..."
+        lblStatus.ForeColor = Color.DarkOrange
 
         waveIn.StartRecording()
-        isRecording = True
-        btnRecord.Text = "Dung ghi am (Space)"
-        lblStatus.Text = "Dang ghi am..."
-        lblStatus.ForeColor = Color.Red
+        countdownTimer.Start()
+    End Sub
+
+    Private Sub CountdownTimer_Tick(sender As Object, e As EventArgs)
+        countdownRemaining -= 1
+
+        If countdownRemaining <= 0 Then
+            countdownTimer.Stop()
+            isCountingDown = False
+            isRecording = True
+            liveWaveformPeaks.Clear()
+
+            btnRecord.Text = "Dung ghi am (Space)"
+            lblStatus.Text = "Dang ghi am..."
+            lblStatus.ForeColor = Color.Red
+
+            If ambientPeak > AMBIENT_NOISE_WARN_THRESHOLD Then
+                lblStatus.Text &= "  (canh bao: moi truong hoi on, can nhac chuyen cho yen tinh hon)"
+            End If
+        Else
+            btnRecord.Text = $"Chuan bi... {countdownRemaining}"
+        End If
+    End Sub
+
+    ' Huy trong luc dang dem nguoc (chua ghi that su vao file nao ca)
+    Private Sub CancelCountdown()
+        countdownTimer.Stop()
+        isCountingDown = False
+        cancelPending = True
+        waveIn?.StopRecording()
+
+        btnRecord.Text = "Ghi am (Space)"
+        lblStatus.Text = "Da huy dem nguoc."
+        lblStatus.ForeColor = Color.Gray
+        waveformPanel.Clear()
     End Sub
 
     Private Sub StopRecording()
@@ -475,20 +622,37 @@ Public Class MainForm
     End Sub
 
     Private Sub WaveIn_DataAvailable(sender As Object, e As WaveInEventArgs)
-        tempWriter?.Write(e.Buffer, 0, e.BytesRecorded)
-
-        ' tinh bien do de hien thi thanh volume meter, dong thoi gom thong ke chat luong
         Dim maxSample As Single = 0
+
         For i = 0 To e.BytesRecorded - 2 Step 2
             Dim sampleVal = BitConverter.ToInt16(e.Buffer, i)
             Dim absRaw = Math.Abs(CInt(sampleVal))
             Dim abs = absRaw / 32768.0F
             If abs > maxSample Then maxSample = abs
-            If abs > recPeakLevel Then recPeakLevel = abs
-            If absRaw >= CLIP_SAMPLE_THRESHOLD Then recClippedCount += 1
-            recSampleCount += 1
+
+            If isCountingDown Then
+                ' trong luc dem nguoc: chi do muc on nen, khong ghi vao file va khong tinh chat luong
+                If abs > ambientPeak Then ambientPeak = abs
+            Else
+                If abs > recPeakLevel Then recPeakLevel = abs
+                If absRaw >= CLIP_SAMPLE_THRESHOLD Then recClippedCount += 1
+                recSampleCount += 1
+            End If
         Next
+
         currentVolume = maxSample
+
+        If Not isCountingDown Then
+            tempWriter?.Write(e.Buffer, 0, e.BytesRecorded)
+            AppendLiveWaveformPeak(maxSample)
+        End If
+    End Sub
+
+    Private Sub AppendLiveWaveformPeak(peak As Single)
+        liveWaveformPeaks.Add(peak)
+        If liveWaveformPeaks.Count > LIVE_WAVEFORM_CAPACITY Then
+            liveWaveformPeaks.RemoveAt(0)
+        End If
     End Sub
 
     Private Sub WaveIn_RecordingStopped(sender As Object, e As StoppedEventArgs)
@@ -497,6 +661,18 @@ Public Class MainForm
         waveIn?.Dispose()
         waveIn = Nothing
         currentVolume = 0
+        isRecording = False
+        btnRecord.Text = "Ghi am (Space)"
+
+        If cancelPending Then
+            cancelPending = False
+            Try
+                If File.Exists(tempFilePath) Then File.Delete(tempFilePath)
+            Catch
+                ' bo qua loi xoa file tam
+            End Try
+            Return
+        End If
 
         Dim errorMsg = CheckRecordingQuality()
         If errorMsg IsNot Nothing Then
@@ -543,11 +719,23 @@ Public Class MainForm
         ShowSentence()
     End Sub
 
+    ' Xu ly ban ghi vua thu: doc mau tho -> cat khoang lang dau/cuoi -> chuan hoa am luong (peak
+    ' normalize, co gioi han khuech dai) -> resample ve chuan Piper -> luu file .wav cuoi cung.
     Private Sub SaveFinalWav()
+        Dim intermediatePath As String = Nothing
         Try
-            Dim finalPath = Path.Combine(wavsFolder, GetFileId(currentIndex) & ".wav")
+            Dim rawSampleRate As Integer = 0
+            Dim rawSamples = ReadAllFloatSamples(tempFilePath, rawSampleRate)
 
-            Using reader As New AudioFileReader(tempFilePath)
+            Dim trimmed = TrimSilence(rawSamples, rawSampleRate, TRIM_SILENCE_THRESHOLD, TRIM_PADDING_MS)
+            Dim processed = NormalizeSamples(trimmed, TARGET_PEAK, MAX_NORMALIZE_GAIN)
+            If processed.Length = 0 Then processed = rawSamples
+
+            intermediatePath = Path.Combine(Path.GetTempPath(), "voicerec_proc_" & Guid.NewGuid().ToString("N") & ".wav")
+            WriteFloatSamplesAsPcm16Wav(intermediatePath, processed, rawSampleRate)
+
+            Dim finalPath = Path.Combine(wavsFolder, GetFileId(currentIndex) & ".wav")
+            Using reader As New AudioFileReader(intermediatePath)
                 Dim targetFormat = New WaveFormat(TARGET_SAMPLE_RATE, TARGET_BITS, TARGET_CHANNELS)
                 Using resampler As New MediaFoundationResampler(reader, targetFormat)
                     resampler.ResamplerQuality = 60
@@ -556,16 +744,138 @@ Public Class MainForm
             End Using
 
             File.Delete(tempFilePath)
+            File.Delete(intermediatePath)
 
             recordedIndices.Add(currentIndex)
             UpdateMetadata(currentIndex, sentences(currentIndex))
 
-            lblStatus.Text = $"Da luu: {GetFileId(currentIndex)}.wav"
+            Dim clipDuration = If(rawSampleRate > 0, processed.Length / CDbl(rawSampleRate), 0)
+            lblStatus.Text = $"Da luu: {GetFileId(currentIndex)}.wav  ({clipDuration:0.0}s, da cat khoang lang + chuan hoa am luong)"
             lblStatus.ForeColor = Color.Green
-            ShowSentence()
+
+            ShowSentence() ' se tu nap lai waveform preview tu file vua luu
+
+            If chkAutoNext.Checked AndAlso currentIndex < sentences.Count - 1 Then
+                autoNextTimer.Start()
+            End If
         Catch ex As Exception
+            Try
+                If intermediatePath IsNot Nothing AndAlso File.Exists(intermediatePath) Then File.Delete(intermediatePath)
+            Catch
+                ' bo qua loi don dep file tam
+            End Try
             MessageBox.Show("Loi khi luu file audio: " & ex.Message, "Loi", MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
+    End Sub
+
+    Private Sub AutoNextTimer_Tick(sender As Object, e As EventArgs)
+        autoNextTimer.Stop()
+        If currentIndex < sentences.Count - 1 Then
+            currentIndex += 1
+            ShowSentence()
+        End If
+    End Sub
+
+    ' Doc toan bo mau am thanh cua 1 file .wav PCM 16-bit thanh mang Single (-1..1).
+    Private Function ReadAllFloatSamples(path As String, ByRef sampleRate As Integer) As Single()
+        Using reader As New WaveFileReader(path)
+            sampleRate = reader.WaveFormat.SampleRate
+
+            Dim totalBytes = CInt(reader.Length)
+            If totalBytes <= 0 Then Return Array.Empty(Of Single)()
+
+            Dim buffer(totalBytes - 1) As Byte
+            Dim totalRead = 0
+            While totalRead < totalBytes
+                Dim n = reader.Read(buffer, totalRead, totalBytes - totalRead)
+                If n <= 0 Then Exit While ' het du lieu de doc
+                totalRead += n
+            End While
+            Dim sampleCount = totalRead \ 2 ' 16-bit = 2 byte/mau
+
+            If sampleCount <= 0 Then Return Array.Empty(Of Single)()
+
+            Dim result(sampleCount - 1) As Single
+            For i = 0 To sampleCount - 1
+                Dim s = BitConverter.ToInt16(buffer, i * 2)
+                result(i) = s / 32768.0F
+            Next
+            Return result
+        End Using
+    End Function
+
+    ' Cat bo phan dau/cuoi co bien do duoi nguong (khoang lang), giu lai it dem 2 ben.
+    Private Function TrimSilence(samples As Single(), sampleRate As Integer, thresholdRatio As Single, paddingMs As Integer) As Single()
+        If samples.Length = 0 Then Return samples
+
+        Dim startIdx = 0
+        Dim endIdx = samples.Length - 1
+
+        While startIdx < samples.Length AndAlso Math.Abs(samples(startIdx)) < thresholdRatio
+            startIdx += 1
+        End While
+        While endIdx > startIdx AndAlso Math.Abs(samples(endIdx)) < thresholdRatio
+            endIdx -= 1
+        End While
+
+        ' toan bo duoi nguong (khong nen xay ra vi da qua kiem tra chat luong) -> giu nguyen
+        If startIdx >= endIdx Then Return samples
+
+        Dim paddingSamples = CInt(sampleRate * paddingMs / 1000.0)
+        startIdx = Math.Max(0, startIdx - paddingSamples)
+        endIdx = Math.Min(samples.Length - 1, endIdx + paddingSamples)
+
+        Dim length = endIdx - startIdx + 1
+        Dim result(length - 1) As Single
+        Array.Copy(samples, startIdx, result, 0, length)
+        Return result
+    End Function
+
+    ' Chuan hoa am luong theo dinh (peak normalize): dua dinh bien do ve targetPeak,
+    ' nhung gioi han he so khuech dai toi da de tranh khuech dai qua muc on nen/tieng ri.
+    Private Function NormalizeSamples(samples As Single(), targetPeak As Single, maxGain As Single) As Single()
+        If samples.Length = 0 Then Return samples
+
+        Dim peak As Single = 0
+        For Each s In samples
+            Dim a = Math.Abs(s)
+            If a > peak Then peak = a
+        Next
+
+        If peak < 0.0001F Then Return samples ' tranh chia cho so gan 0
+
+        Dim gain = targetPeak / peak
+        gain = Math.Min(gain, maxGain)
+        If gain <= 1.0F Then Return samples ' khong can khuech dai neu da dat/vuot muc tieu
+
+        Dim result(samples.Length - 1) As Single
+        For i = 0 To samples.Length - 1
+            Dim v = samples(i) * gain
+            If v > 1.0F Then v = 1.0F
+            If v < -1.0F Then v = -1.0F
+            result(i) = v
+        Next
+        Return result
+    End Function
+
+    ' Ghi mang mau Single (-1..1) thanh file .wav PCM 16-bit mono chuan.
+    Private Sub WriteFloatSamplesAsPcm16Wav(path As String, samples As Single(), sampleRate As Integer)
+        Dim writeFormat = New WaveFormat(sampleRate, 16, 1)
+        Using writer As New WaveFileWriter(path, writeFormat)
+            If samples.Length = 0 Then Return
+
+            Dim byteBuffer(samples.Length * 2 - 1) As Byte
+            For i = 0 To samples.Length - 1
+                Dim v = samples(i)
+                If v > 1.0F Then v = 1.0F
+                If v < -1.0F Then v = -1.0F
+                Dim s As Int16 = CType(v * 32767.0F, Int16)
+                Dim b = BitConverter.GetBytes(s)
+                byteBuffer(i * 2) = b(0)
+                byteBuffer(i * 2 + 1) = b(1)
+            Next
+            writer.Write(byteBuffer, 0, byteBuffer.Length)
+        End Using
     End Sub
 
     ' file metadata.csv dinh dang Piper can: id|text (id = ten file khong co duoi .wav)
@@ -616,9 +926,90 @@ Public Class MainForm
         End Try
     End Sub
 
+    ' Nap waveform cua file da luu (sau xu ly) de hien preview khi dang xem lai cau da thu.
+    Private Sub LoadWaveformPreview(fileId As String)
+        Try
+            Dim filePath As String = Path.Combine(wavsFolder, fileId & ".wav")
+            If Not File.Exists(filePath) Then
+                waveformPanel.Clear()
+                Return
+            End If
+
+            Dim sr As Integer = 0
+            Dim samples = ReadAllFloatSamples(filePath, sr)
+            Dim buckets = BuildWaveformBuckets(samples, Math.Max(waveformPanel.ClientSize.Width, 1))
+            waveformPanel.SetSamples(buckets, Color.SeaGreen)
+        Catch
+            waveformPanel.Clear()
+        End Try
+    End Sub
+
+    ' Gom mang mau thanh 'bucketCount' cot, moi cot lay bien do dinh (peak) trong doan tuong ung -
+    ' dung de ve preview waveform vua/dep voi be rong panel co dinh.
+    Private Function BuildWaveformBuckets(samples As Single(), bucketCount As Integer) As Single()
+        If samples Is Nothing OrElse samples.Length = 0 OrElse bucketCount <= 0 Then
+            Return Array.Empty(Of Single)()
+        End If
+
+        Dim result(bucketCount - 1) As Single
+        Dim samplesPerBucket = Math.Max(1, CInt(samples.Length / CDbl(bucketCount)))
+
+        For b = 0 To bucketCount - 1
+            Dim startIdx = b * samplesPerBucket
+            Dim endIdx = Math.Min(samples.Length, startIdx + samplesPerBucket)
+            Dim peak As Single = 0
+            For i = startIdx To endIdx - 1
+                Dim a = Math.Abs(samples(i))
+                If a > peak Then peak = a
+            Next
+            result(b) = peak
+        Next
+
+        Return result
+    End Function
+
+    ' ===================== Xuat dataset =====================
+
+    Private Sub BtnExportZip_Click(sender As Object, e As EventArgs)
+        Using sfd As New SaveFileDialog() With {
+            .Filter = "Zip files (*.zip)|*.zip",
+            .FileName = $"dataset_{DateTime.Now:yyyyMMdd_HHmm}.zip",
+            .Title = "Luu dataset thanh file zip"
+        }
+            If sfd.ShowDialog() <> DialogResult.OK Then Return
+
+            Dim zipPath = sfd.FileName
+            btnExportZip.Enabled = False
+            lblStatus.Text = "Dang nen dataset..."
+            lblStatus.ForeColor = Color.Blue
+
+            Task.Run(Sub()
+                         Try
+                             If File.Exists(zipPath) Then File.Delete(zipPath)
+                             ZipFile.CreateFromDirectory(outputRoot, zipPath, CompressionLevel.Optimal, False)
+
+                             Me.Invoke(Sub()
+                                           lblStatus.Text = "Da xuat dataset: " & Path.GetFileName(zipPath)
+                                           lblStatus.ForeColor = Color.Green
+                                           btnExportZip.Enabled = True
+                                       End Sub)
+                         Catch ex As Exception
+                             Me.Invoke(Sub()
+                                           lblStatus.Text = "Loi khi nen dataset."
+                                           lblStatus.ForeColor = Color.Red
+                                           btnExportZip.Enabled = True
+                                           MessageBox.Show("Loi khi nen dataset: " & ex.Message, "Loi", MessageBoxButtons.OK, MessageBoxIcon.Error)
+                                       End Sub)
+                         End Try
+                     End Sub)
+        End Using
+    End Sub
+
     ' ===================== Dieu huong =====================
 
     Private Sub BtnPrev_Click(sender As Object, e As EventArgs)
+        If isCountingDown Then CancelCountdown()
+        If isRecording Then StopRecording()
         If currentIndex > 0 Then
             currentIndex -= 1
             ShowSentence()
@@ -626,6 +1017,8 @@ Public Class MainForm
     End Sub
 
     Private Sub BtnNext_Click(sender As Object, e As EventArgs)
+        If isCountingDown Then CancelCountdown()
+        If isRecording Then StopRecording()
         If currentIndex < sentences.Count - 1 Then
             currentIndex += 1
             ShowSentence()
@@ -638,6 +1031,10 @@ Public Class MainForm
         Dim val = CInt(currentVolume * 100)
         val = Math.Max(0, Math.Min(100, val))
         meterVolume.Value = val
+
+        If isRecording Then
+            waveformPanel.SetSamples(liveWaveformPeaks.ToArray(), Color.Crimson)
+        End If
     End Sub
 
     Private Sub MainForm_KeyDown(sender As Object, e As KeyEventArgs)
@@ -657,7 +1054,7 @@ Public Class MainForm
                 ToggleRecording()
                 e.Handled = True
             Case Keys.R
-                If Not isRecording Then StartRecording()
+                If Not isRecording AndAlso Not isCountingDown Then StartRecording()
                 e.Handled = True
             Case Keys.P
                 PlayCurrent()
@@ -675,9 +1072,12 @@ Public Class MainForm
     End Sub
 
     Protected Overrides Sub OnFormClosing(e As FormClosingEventArgs)
+        If isCountingDown Then CancelCountdown()
         If isRecording Then StopRecording()
         SaveLastPosition()
         meterTimer?.Stop()
+        countdownTimer?.Stop()
+        autoNextTimer?.Stop()
         MyBase.OnFormClosing(e)
     End Sub
 
